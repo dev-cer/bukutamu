@@ -58,6 +58,17 @@ k8s/
 scripts/gen_k8s.py # generate ulang ConfigMap bila kode di app/ diubah
 ```
 
+## Dry-run fasilitator
+
+Sebelum sesi, jalankan seluruh alur lab secara otomatis di akun Anda (resource dihapus otomatis di akhir):
+
+```bash
+./scripts/dry-run.sh            # lab Kubernetes (sesi 30 menit), ± 8–12 menit
+./scripts/dry-run.sh --with-vm  # + lab Civo Compute (sesi 60 menit), ± 15–20 menit
+```
+
+Hasil PASS/FAIL dan durasi tiap langkah tersimpan di `dry-run-report-<tanggal>.txt`.
+
 ## Arsitektur
 
 | | Monolitik | Microservice |
