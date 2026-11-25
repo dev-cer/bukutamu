@@ -1,0 +1,13 @@
+# Service internal (ClusterIP): hanya bisa diakses dari dalam cluster, mis. oleh nginx.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: buku-tamu
+spec:
+  type: ClusterIP
+  selector: { app: api }
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

@@ -1,0 +1,12 @@
+# Persistent volume di Civo (StorageClass default: civo-volume).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: api-data
+  namespace: buku-tamu
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: civo-volume
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,23 @@
+# Versi MONOLITIK: satu container melayani halaman web + API.
+# Jalankan dari folder ini:  docker compose up -d   ->  http://<IP_VM>:8080
+services:
+  app:
+    image: python:3.12-alpine
+    command: ["python", "/app/app.py"]
+    environment:
+      MODE: monolith
+      DATA_DIR: /data
+      PYTHONDONTWRITEBYTECODE: "1"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../../app:/app:ro
+      - mono-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+volumes:
+  mono-data:

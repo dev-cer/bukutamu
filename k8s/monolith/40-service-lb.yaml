@@ -1,0 +1,13 @@
+# Service tipe LoadBalancer -> Civo membuat Load Balancer dengan IP publik.
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+  namespace: buku-tamu-mono
+spec:
+  type: LoadBalancer
+  selector: { app: app }
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

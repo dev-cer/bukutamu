@@ -1,0 +1,67 @@
+# api: Python (image resmi python:3.12-alpine) menjalankan app.py dari ConfigMap.
+# 1 replika + strategi Recreate karena data disimpan di SQLite pada satu volume (ReadWriteOnce).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: buku-tamu
+  labels: { app: api }
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: api }
+  template:
+    metadata:
+      labels: { app: api }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: python:3.12-alpine
+          command: ["python", "/app/app.py"]
+          env:
+            - { name: MODE, value: "api" }
+            - { name: DATA_DIR, value: /data }
+            - { name: PYTHONDONTWRITEBYTECODE, value: "1" }
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - { name: code, mountPath: /app, readOnly: true }
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: code
+          configMap:
+            name: api-code
+            items:
+            - key: app.py
+              path: app.py
+        - name: data
+          persistentVolumeClaim:
+            claimName: api-data
+        - name: tmp
+          emptyDir: {}

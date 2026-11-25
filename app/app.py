@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""Buku Tamu Civo — contoh aplikasi untuk onboarding Civo Compute & Civo Kubernetes.
+
+Hanya memakai Python standard library (tanpa pip install), jadi bisa langsung jalan
+dengan image resmi python:3.12-alpine.
+
+MODE=monolith  -> satu proses melayani halaman web (/) dan API (/api/...)
+MODE=api       -> hanya API; halaman web dilayani terpisah oleh nginx (microservices)
+"""
+import json
+import os
+import socket
+import sqlite3
+import threading
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+MODE = os.environ.get("MODE", "monolith")
+PORT = int(os.environ.get("PORT", "8080"))
+DATA_DIR = os.environ.get("DATA_DIR", "/data")
+STATIC_DIR = os.environ.get("STATIC_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "static"))
+VERSION = "1.0.0"
+HOSTNAME = socket.gethostname()
+DB_PATH = os.path.join(DATA_DIR, "bukutamu.db")
+LOCK = threading.Lock()
+
+
+def db():
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with LOCK, db() as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS entries ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, city TEXT, "
+            "message TEXT, served_by TEXT, created_at TEXT NOT NULL)"
+        )
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "BukuTamuCivo/" + VERSION
+
+    def log_message(self, fmt, *args):  # log ringkas ke stdout (terlihat di docker logs / kubectl logs)
+        print(f"{self.address_string()} {self.command} {self.path} -> {fmt % args}", flush=True)
+
+    def send_json(self, code, payload):
+        body = json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Served-By", HOSTNAME)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        path = self.path.split("?")[0]
+        if path == "/healthz":
+            return self.send_json(200, {"status": "ok"})
+        if path == "/api/info":
+            return self.send_json(200, {"app": "buku-tamu-civo", "mode": MODE, "version": VERSION, "hostname": HOSTNAME})
+        if path == "/api/entries":
+            with db() as conn:
+                rows = conn.execute("SELECT * FROM entries ORDER BY id DESC LIMIT 50").fetchall()
+            return self.send_json(200, {"served_by": HOSTNAME, "mode": MODE, "entries": [dict(r) for r in rows]})
+        if MODE == "monolith" and path in ("/", "/index.html"):
+            with open(os.path.join(STATIC_DIR, "index.html"), "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            return self.wfile.write(body)
+        return self.send_json(404, {"error": "not found"})
+
+    def do_POST(self):
+        if self.path.split("?")[0] != "/api/entries":
+            return self.send_json(404, {"error": "not found"})
+        try:
+            length = min(int(self.headers.get("Content-Length", "0")), 10_000)
+            data = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            return self.send_json(400, {"error": "body harus JSON"})
+        name = str(data.get("name", "")).strip()[:60]
+        if not name:
+            return self.send_json(400, {"error": "nama wajib diisi"})
+        city = str(data.get("city", "")).strip()[:60]
+        message = str(data.get("message", "")).strip()[:280]
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with LOCK, db() as conn:
+            cur = conn.execute(
+                "INSERT INTO entries (name, city, message, served_by, created_at) VALUES (?,?,?,?,?)",
+                (name, city, message, HOSTNAME, now),
+            )
+        return self.send_json(201, {"id": cur.lastrowid, "served_by": HOSTNAME})
+
+
+if __name__ == "__main__":
+    init_db()
+    print(f"Buku Tamu Civo v{VERSION} | mode={MODE} | port={PORT} | data={DB_PATH} | host={HOSTNAME}", flush=True)
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

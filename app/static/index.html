@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buku Tamu Civo</title>
+<style>
+  :root { --cloud:#D1CCBE; --cloud-lt:#ECE9E1; --ink:#000; --aurora:#00FF6F; --public:#D46FFE; --muted:#4A4842; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--cloud); color: var(--ink); }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-family: Georgia, serif; font-weight: 300; font-size: 40px; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 24px; }
+  .info { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:24px; }
+  .chip { background:#000; color:#fff; border-radius:999px; padding:6px 14px; font-size:13px; }
+  .chip b { color: var(--aurora); font-weight:600; }
+  form, .list { background: var(--cloud-lt); border-radius:14px; padding:20px; }
+  form { display:grid; gap:10px; grid-template-columns: 1fr 1fr; margin-bottom:20px; }
+  form textarea, form button { grid-column: 1 / -1; }
+  input, textarea { width:100%; padding:10px 12px; border:1px solid #bdb7a7; border-radius:10px; font: inherit; background:#fff; }
+  button { background: var(--aurora); border:0; border-radius:999px; padding:12px; font: inherit; font-weight:600; cursor:pointer; }
+  .entry { border-bottom:1px solid #d6d1c4; padding:12px 0; }
+  .entry:last-child { border-bottom:0; }
+  .entry .meta { color: var(--muted); font-size: 13px; }
+  .err { color:#9C0006; }
+  @media (max-width: 560px) { form { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Buku Tamu Civo</h1>
+  <p class="sub">Contoh aplikasi onboarding: deploy ke Civo Compute dan Civo Kubernetes.</p>
+  <div class="info">
+    <span class="chip">Mode: <b id="mode">-</b></span>
+    <span class="chip">API dilayani oleh: <b id="api-pod">-</b></span>
+    <span class="chip">Web dilayani oleh: <b id="web-pod">-</b></span>
+  </div>
+  <form id="f">
+    <input name="name" placeholder="Nama" maxlength="60" required>
+    <input name="city" placeholder="Kota / perusahaan" maxlength="60">
+    <textarea name="message" rows="2" placeholder="Pesan singkat (opsional)" maxlength="280"></textarea>
+    <button type="submit">Isi buku tamu</button>
+  </form>
+  <div class="list" id="list">Memuat...</div>
+</main>
+<script>
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function load() {
+  const list = document.getElementById("list");
+  try {
+    const res = await fetch("/api/entries", { cache: "no-store" });
+    const data = await res.json();
+    document.getElementById("mode").textContent = data.mode === "api" ? "microservices" : data.mode;
+    document.getElementById("api-pod").textContent = data.served_by;
+    document.getElementById("web-pod").textContent = res.headers.get("X-Web-Pod") || "(sama dengan API)";
+    list.innerHTML = data.entries.length ? data.entries.map((e) =>
+      `<div class="entry"><b>${esc(e.name)}</b>${e.city ? " · " + esc(e.city) : ""}<div>${esc(e.message)}</div>` +
+      `<div class="meta">${esc(e.created_at)} · dicatat oleh ${esc(e.served_by)}</div></div>`).join("") : "Belum ada tamu. Jadilah yang pertama!";
+  } catch (err) {
+    list.innerHTML = `<span class="err">Gagal memanggil API: ${esc(err.message)}</span>`;
+  }
+}
+document.getElementById("f").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const body = Object.fromEntries(new FormData(ev.target));
+  const res = await fetch("/api/entries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (res.ok) { ev.target.reset(); load(); } else { alert((await res.json()).error || "Gagal menyimpan"); }
+});
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>

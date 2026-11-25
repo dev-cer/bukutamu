@@ -1,0 +1,21 @@
+# Ingress lewat Traefik (terpasang default di Civo Kubernetes).
+# Ganti GANTI_DENGAN_DNS_CLUSTER dengan DNS cluster Anda:
+#   civo kubernetes show civo-onboarding -o custom -f DNSEntry
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: buku-tamu
+  namespace: buku-tamu
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: buku-tamu.GANTI_DENGAN_DNS_CLUSTER
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80
